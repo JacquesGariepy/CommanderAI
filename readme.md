@@ -1,4 +1,6 @@
-# CommanderAI - Windows automation system with LLM
+# CommanderAI - LLM-Driven Action Generation on Windows
+
+> The system interprets requests and dynamically generates Python code to interact with applications.
 
 *Note: This project is a **proof of concept** demonstrating the automation capabilities described below. Be patient. It is not intended for production use without further validation, security measures, and adaptations.*
 
