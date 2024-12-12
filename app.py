@@ -28,6 +28,8 @@ from PIL import Image
 import cv2
 import speech_recognition as sr
 import pyttsx3
+from dotenv import load_dotenv
+load_dotenv()
 
 # Configure logging
 logging.basicConfig(
@@ -46,7 +48,10 @@ MIN_ELEMENT_HEIGHT = 20
 MAX_ELEMENT_HEIGHT = 100
 
 system_language = locale.getdefaultlocale()[0]
+
 llm_model = "gpt-4o-mini"
+load_dotenv()
+openai_api_key = os.environ.get("OPENAI_API_KEY")
 
 # Initialize text-to-speech engine
 engine = pyttsx3.init()
@@ -538,7 +543,7 @@ class InteractionStrategies:
             
                 Provide only the Python code.
                 """
-                llm = ChatOpenAI(model=llm_model)
+                llm = ChatOpenAI(api_key=openai_api_key, model=llm_model)
                 chain = LLMChain(llm=llm, prompt=PromptTemplate.from_template(prompt))
                 response: AIMessage = chain.run({})
                 logging.debug(f"Generated code for interaction: {response}")
@@ -804,7 +809,7 @@ class TaskInterpreter:
                 """
             )
 
-            llm = ChatOpenAI(model=llm_model)
+            llm = ChatOpenAI(api_key=openai_api_key, model=llm_model)
             chain = prompt_template | llm
 
             response = await chain.ainvoke({
