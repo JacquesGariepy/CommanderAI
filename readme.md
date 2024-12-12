@@ -1,4 +1,4 @@
-# CommanderAI - LLM-Driven Action Generation on Windows
+# CommanderAI / LLM-Driven Action Generation on Windows
 
 > The system interprets requests and dynamically generates Python code to interact with applications with Langchain (openai).
 
