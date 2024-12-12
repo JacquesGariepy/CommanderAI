@@ -49,7 +49,7 @@ As a **proof of concept**, it demonstrates how various components can be integra
 
 ` Navigate to wikipedia.com with chrome and find the definition of AI `
 ` Write me a text on automation `
-' draw me a cat
+` draw me a cat `
 ![cat_3](https://github.com/user-attachments/assets/f3088765-8f1d-4ecf-9ea1-7ab0701326db)
 
 ---
