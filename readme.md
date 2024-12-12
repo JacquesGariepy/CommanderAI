@@ -1,4 +1,4 @@
-# CommanderAI - Windows
+# CommanderAI - Windows automation system with LLM
 
 *Note: This project is a **proof of concept** demonstrating the automation capabilities described below. Be patient. It is not intended for production use without further validation, security measures, and adaptations.*
 
@@ -28,7 +28,7 @@
 
 ## General Description
 
-This project is an intelligent automation system designed to interact with Windows applications, analyze the screen, recognize speech, speak responses, execute planned tasks, and interact with user interfaces in an automated manner. It leverages advanced language models (via the OpenAI API), speech recognition, text-to-speech, screen capture, text recognition (OCR), and application interaction through tools like pywinauto and pyautogui.
+This project is an intelligent automation system designed to interact with Windows applications and LLM, analyze the screen, recognize speech, speak responses, execute planned tasks, and interact with user interfaces in an automated manner. It leverages advanced language models (via the OpenAI API), langchain, speech recognition, text-to-speech, screen capture, text recognition (OCR), and application interaction through tools like pywinauto and pyautogui.
 
 As a **proof of concept**, it demonstrates how various components can be integrated to automate different tasks. It serves as an example and inspiration, but further study and hardening are needed before using it in a real-world environment.
 
