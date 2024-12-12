@@ -1,4 +1,4 @@
-# Automation System - README
+# CommanderAI
 
 *Note: This project is a **proof of concept** demonstrating the automation capabilities described below. It is not intended for production use without further validation, security measures, and adaptations.*
 
