@@ -45,6 +45,15 @@ As a **proof of concept**, it demonstrates how various components can be integra
 - **Detailed logging**: Actions, errors, and debug info are logged to `automation.log`.
 
 ---
+## Samples
+
+` Navigate to wikipedia.com with chrome and find the definition of AI `
+` Write me a text on automation `
+' draw me a cat
+![cat_3](https://github.com/user-attachments/assets/f3088765-8f1d-4ecf-9ea1-7ab0701326db)
+
+---
+
 
 ## Architecture and Components
 
@@ -75,8 +84,8 @@ As a **proof of concept**, it demonstrates how various components can be integra
 
 1. **Clone the repository**:
    ```bash
-   git clone https://your-repo.git
-   cd your-repo
+   git clone https://github.com/JacquesGariepy/CommanderAI.git
+   cd CommanderAI
    ```
 
 2. **Install dependencies**:
