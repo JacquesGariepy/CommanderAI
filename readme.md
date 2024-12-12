@@ -80,7 +80,7 @@ draw me a cat
 
 - **Operating System**: Windows (required for pywinauto, win32gui, etc.).
 - Python 3.8+ recommended.
-- An OpenAI API key (if using the LLM).
+- An OpenAI API key
 - Microphone and speakers (for voice recognition and text-to-speech).
 - Tesseract OCR installed on the machine (and accessible in the PATH).
 - Internet connection (for Google Speech Recognition and OpenAI API).
@@ -116,7 +116,7 @@ draw me a cat
 
 ## Configuration
 
-- **OpenAI API Key**: Set the `OPENAI_API_KEY` environment variable with your key.
+- **OpenAI API Key**: Set the `OPENAI_API_KEY` environment variable with your key in ".env"
 - **System Language**: The code detects your system language via `locale.getdefaultlocale()[0]`.
 - **Tesseract Settings**: Default is `TESSERACT_CONFIG = '--oem 3 --psm 6'` and `lang='fra'`. Adjust if needed.
 - **Memory File**: `MEMORY_FILE = "memory.json"`. Ensure it’s writable.
