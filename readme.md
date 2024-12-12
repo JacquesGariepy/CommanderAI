@@ -1,6 +1,6 @@
-# CommanderAI
+# CommanderAI - Windows
 
-*Note: This project is a **proof of concept** demonstrating the automation capabilities described below. It is not intended for production use without further validation, security measures, and adaptations.*
+*Note: This project is a **proof of concept** demonstrating the automation capabilities described below. Be patient. It is not intended for production use without further validation, security measures, and adaptations.*
 
 ## Table of Contents
 
@@ -47,9 +47,16 @@ As a **proof of concept**, it demonstrates how various components can be integra
 ---
 ## Samples
 
-` Navigate to wikipedia.com with chrome and find the definition of AI `
-` Write me a text on automation `
-` draw me a cat `
+```markdown
+Navigate to wikipedia.com with chrome and find the definition of AI
+```
+```markdown
+Write me a text on automation
+```
+In the whispering woods, where the tall trees sway,Nature's beauty unfolds in a magical display.With petals like silk and leaves like a song,The chorus of life hums, inviting us along.The rivers dance lightly, reflecting the sky,While mountains stand guard, reaching up high.Each sunrise a canvas, each sunset a dream,In the heart of the forest, life flows like a stream.The fragrance of flowers, the warmth of the sun,In nature's embrace, we find joy, we are one.So let us wander where the wild things grow,In the splendor of nature, let our spirits flow.
+```markdown 
+draw me a cat
+```
 ![cat_3](https://github.com/user-attachments/assets/f3088765-8f1d-4ecf-9ea1-7ab0701326db)
 
 ---
