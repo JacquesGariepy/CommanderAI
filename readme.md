@@ -82,7 +82,7 @@ draw me a cat
 - Python 3.8+ recommended.
 - An OpenAI API key
 - Microphone and speakers (for voice recognition and text-to-speech).
-- Tesseract OCR installed on the machine (and accessible in the PATH).
+- Tesseract OCR installed on the machine (and accessible in the PATH). Installer here https://github.com/UB-Mannheim/tesseract/wiki.
 - Internet connection (for Google Speech Recognition and OpenAI API).
 
 ---
