@@ -1,0 +1,17 @@
+pyautogui
+psutil
+pywinauto
+openai
+pywin32
+pywinauto
+langchain
+langchain_community
+mss
+pytesseract
+numpy
+opencv-python
+SpeechRecognition
+pyttsx3
+PyYAML
+pillow
+
