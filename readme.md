@@ -1,4 +1,3 @@
-```markdown
 # Automation System - README
 
 *Note: This project is a **proof of concept** demonstrating the automation capabilities described below. It is not intended for production use without further validation, security measures, and adaptations.*
@@ -228,4 +227,3 @@ Submit a pull request with your changes and a clear description.
 ## License
 
 This proof of concept is not explicitly licensed. For use beyond experimental purposes, contact the author or define an appropriate license.
-```
