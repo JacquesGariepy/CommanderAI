@@ -14,4 +14,4 @@ SpeechRecognition
 pyttsx3
 PyYAML
 pillow
-
+python-dotenv
