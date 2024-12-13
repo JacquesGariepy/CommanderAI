@@ -7,7 +7,7 @@ import logging
 import re
 import time
 from pathlib import Path
-from typing import List, Dict, Any, Tuple, Optional
+from typing import List, Dict, Any, Literal, Tuple, Optional, TypedDict, Union
 import subprocess
 import pyautogui
 import psutil
@@ -877,7 +877,26 @@ class TaskInterpreter:
         for key in required_keys:
             if key not in details:
                 raise ValueError(f"Interaction details must contain '{key}'")
+class OpenStep(TypedDict):
+    action: Literal["open"]
+    application: str
 
+class InteractDetails(TypedDict):
+    process_name: str
+    action_description: str
+
+class InteractStep(TypedDict):
+    action: Literal["interact"]
+    details: InteractDetails
+
+class CaptureStep(TypedDict):
+    action: Literal["capture_screen"]
+
+StepType = Union[OpenStep, InteractStep, CaptureStep]           
+      
+class TaskPlan(TypedDict):
+    steps: List[StepType]
+    
 async def main():
     """Main entry point of the application."""
     try:
@@ -895,14 +914,16 @@ async def main():
         while True:
             try:
                 # Ask the user if they want to use voice or text
-                mode = input("\nDo you want to use voice or text to enter a command? (voice/text): ").strip().lower()
+                mode = input("\nDo you want to use voice or text to enter a command? (voice/text/sample): ").strip().lower()
 
                 if mode == "voice":
                     user_request = recognize_speech()
                 elif mode == "text":
                     user_request = input("\nEnter a command (or 'exit' to quit): ").strip().lower()
+                elif mode == "sample":
+                    user_request = "sample"
                 else:
-                    speak_message("Unrecognized mode. Please choose 'voice' or 'text'.")
+                    speak_message("Unrecognized mode. Please choose 'voice', 'text' or 'sample'.")
                     continue
 
                 if "exit" in user_request:
@@ -916,7 +937,28 @@ async def main():
                     tool_names = [tool["name"] for tool in tools]
                     speak_message(f"Available applications: {', '.join(tool_names)}")
                     continue
+                elif "sample" in user_request:
+                    # Example task plan (replace with your actual plan)
+                    speak_message("Executing the sample plan.")
+                    example_task: TaskPlan = {
+                    "steps": [
+                        
+                        {
+                        "action": "open",
+                        "application": "notepad"
+                        },
+                        {
+                        "action": "interact",
+                        "details": {
+                            "process_name": "notepad.exe",
+                            "action_description": "Create a new file and type 'Hello, World!'"
+                        }
+                        }
+                    ]
+                    }
 
+                    task_executor.execute_task(example_task)
+                    speak_message("Task executed successfully.")
                 if user_request:
                     speak_message("Analyzing your request...")
                     task_plan = await task_interpreter.interpret_task(user_request)
