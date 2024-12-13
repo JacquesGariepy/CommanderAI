@@ -47,7 +47,7 @@ As a **proof of concept**, it demonstrates how various components can be integra
 - **Detailed logging**: Actions, errors, and debug info are logged to `automation.log`.
 
 ---
-## Samples
+## Exemples
 
 ```markdown
 Navigate to wikipedia.com with chrome and find the definition of AI
@@ -62,7 +62,27 @@ draw me a cat
 ![cat_3](https://github.com/user-attachments/assets/f3088765-8f1d-4ecf-9ea1-7ab0701326db)
 
 ---
+## Pre-prepared tasks - TaskPlan  
 
+It can accept pre-prepared tasks as input in JSON format, for example, if the tool is connected to an external utility and provides it with the steps. In this POC, simply type "sample.".
+```python 
+TaskPlan = {
+              "steps": [    
+                  {
+                     "action": "open",
+                     "application": "notepad"
+                  },
+                  {
+                     "action": "interact",
+                     "details": {
+                         "process_name": "notepad.exe",
+                         "action_description": "Create a new file and type 'Hello, World!'"
+                     }
+                  }
+              ]
+            }
+```
+---
 
 ## Architecture and Components
 
