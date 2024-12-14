@@ -34,6 +34,8 @@ This project is an intelligent automation system designed to interact with Windo
 
 As a **proof of concept**, it demonstrates how various components can be integrated to automate different tasks. It serves as an example and inspiration, but further study and hardening are needed before using it in a real-world environment.
 
+[![Watch the video](https://github.com/user-attachments/assets/a1e06233-aa9b-4442-ada0-d4bdaa2ffbbc)](https://youtu.be/-aKLn3fCqa0) (draw at 1:07)
+
 ---
 
 ## Key Features
