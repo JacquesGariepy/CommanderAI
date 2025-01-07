@@ -15,12 +15,16 @@ from langchain.prompts import PromptTemplate
 from langchain.chat_models import ChatOpenAI
 from langchain.schema import AIMessage
 from langchain.chains import LLMChain
+from dotenv import load_dotenv
+load_dotenv()
 
 logging.basicConfig(level=logging.DEBUG)
 
 class TaskInterpreter:
     def __init__(self, registry):
         self.registry = registry
+        self.openai_api_key = os.environ.get("OPENAI_API_KEY")
+        self.LLM_MODEL = os.environ.get("LLM_MODEL", "gpt-4o-mini")
 
     async def interpret_task(self, user_request: str) -> Dict[str, Any]:
         tool_names = [t["name"] for t in self.registry.list_tools()]
@@ -49,7 +53,7 @@ class TaskInterpreter:
             """
         )
 
-        llm = ChatOpenAI(api_key=os.environ.get("OPENAI_API_KEY"), model=os.environ.get("LLM_MODEL", "gpt-4o-mini"))
+        llm = ChatOpenAI(api_key=self.openai_api_key, model=self.LLM_MODEL)
         chain = prompt_template | llm
 
         response = await chain.ainvoke({

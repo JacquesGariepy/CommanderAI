@@ -105,6 +105,7 @@ class TaskExecutor:
         return {"screen_text": txt, "ui_elements": els, "timestamp": self.last_analysis_time}
 
     async def execute_task(self, task_plan: Dict[str, Any]) -> str:
+        logging.debug(f"[TaskExecutor] Received task plan: {json.dumps(task_plan, indent=2)}")
         results = []
         logging.info("[TaskExecutor] Starting execute_task...")
 
@@ -124,22 +125,25 @@ class TaskExecutor:
                     self.memory.record_success("capture_screen")
 
                 elif action == "open":
-                    detail = await self._handle_open(step)
+                    step_result["details"] = await self._handle_open_with_validation(step)
+                    if "opened successfully" in step_result["details"]:
+                        step_result["status"] = "success"
                     analysis = await self.analyze_current_screen()
-                    step_result["details"] = detail
                     step_result["screen_state"] = analysis
-                    if "opened successfully" in detail:
+                    if "opened successfully" in step_result["details"]:
                         step_result["status"] = "success"
                         self.memory.record_success("open_app")
                     else:
                         self.memory.record_failure("open_app")
 
                 elif action == "interact":
-                    detail = await self._handle_interact(step)
+                    interaction_result = await self._handle_interact_with_validation(step)
+                    step_result["details"] = interaction_result
+                    if "successful" in interaction_result:
+                        step_result["status"] = "success"
                     analysis = await self.analyze_current_screen()
-                    step_result["details"] = detail
                     step_result["screen_state"] = analysis
-                    if "successful" in detail:
+                    if "successful" in interaction_result:
                         step_result["status"] = "success"
                         self.memory.record_success("interact")
                     else:
@@ -167,52 +171,72 @@ class TaskExecutor:
         }
         return json.dumps(final, indent=2)
 
-    async def _handle_open(self, step: Dict[str, Any]) -> str:
+    async def _handle_open_with_validation(self, step: Dict[str, Any]) -> str:
         application_name = step.get("application", "")
         if not application_name:
             return "No application specified."
 
-        from ..tools.memory import PersistentMemory
-
-        logging.info(f"[TaskExecutor] Checking registry...")
+        logging.debug(f"[TaskExecutor] Trying to open => '{application_name}'")
         path = self.app_registry.find_executable(application_name)
-        if not path:
+        logging.debug(f"[TaskExecutor] find_executable('{application_name}') => {path}")
+        if not path or not os.path.isfile(path):
             self.app_registry.update_tool_stats(application_name, success=False)
             return f"Executable not found: {application_name}"
 
         try:
-            await asyncio.to_thread(pywinauto.Application(backend="uia").start, path)
-            from .window_locator import WindowLocator
-            for _ in range(10):
-                w = await asyncio.to_thread(WindowLocator.find_window_by_executable, application_name)
-                if w:
-                    self.app_registry.update_tool_stats(application_name, success=True)
-                    return f"{application_name} opened successfully"
-                await asyncio.sleep(0.5)
-
-            self.app_registry.update_tool_stats(application_name, success=False)
-            return f"Failed to validate launch of {application_name}"
+            await asyncio.to_thread(pywinauto.Application(backend='uia').start, path)
         except Exception as e:
             self.app_registry.update_tool_stats(application_name, success=False)
-            return f"Failed to open {application_name}: {str(e)}"
+            return f"Failed to open {application_name}: {e}"
 
-    async def _handle_interact(self, step: Dict[str, Any]) -> str:
+        if await self._validate_open_action(application_name):
+            self.app_registry.update_tool_stats(application_name, success=True)
+            return f"{application_name} opened successfully"
+        else:
+            self.app_registry.update_tool_stats(application_name, success=False)
+            return f"Failed to validate launch of {application_name}"
+
+    async def _validate_open_action(self, application_name: str, retries: int = 10, delay: float = 0.5) -> bool:
+        for attempt in range(retries):
+            window = await asyncio.to_thread(WindowLocator.find_window_by_executable, application_name)
+            if window:
+                logging.debug(f"[TaskExecutor] found window on attempt {attempt+1}")
+                return True
+            logging.debug(f"[TaskExecutor] not found, attempt {attempt+1}/{retries}")
+            await asyncio.sleep(delay)
+        return False
+
+    async def _handle_interact_with_validation(self, step: Dict[str, Any]) -> str:
         details = step.get("details", {})
         proc_name = details.get("process_name", "")
         desc = details.get("action_description", "")
-
         if not proc_name or not desc:
             return "Missing process_name or action_description."
 
-        from .window_locator import WindowLocator
-        try:
-            w = await asyncio.to_thread(WindowLocator.find_window_by_executable, proc_name)
-            if not w:
-                logging.error(f"[TaskExecutor] Window not found for {proc_name}")
-                return f"Window not found for {proc_name}"
+        logging.debug(f"[TaskExecutor] Interact => process: {proc_name}, action: {desc}")
+        window = await asyncio.to_thread(WindowLocator.find_window_by_executable, proc_name)
+        if not window:
+            return f"Window not found for {proc_name}"
 
-            success = self.strategies.interact(w, desc)
-            return "Interaction successful" if success else "Interaction failed"
-        except Exception as e:
-            logging.error(f"[TaskExecutor] _handle_interact => {e}")
-            return f"Interaction failed: {str(e)}"
+        success = self.strategies.interact(window, desc)
+        return "Interaction successful" if success else "Interaction failed"
+
+def compare_memory_files(agents_memory_path: str, main_memory_path: str):
+    try:
+        with open(agents_memory_path, "r", encoding="utf-8") as f1, \
+             open(main_memory_path, "r", encoding="utf-8") as f2:
+            agents_data = json.load(f1)
+            main_data = json.load(f2)
+
+        agents_registry = agents_data.get("registry", {})
+        main_registry = main_data.get("registry", {})
+
+        missing_in_agents = set(main_registry.keys()) - set(agents_registry.keys())
+        missing_in_main = set(agents_registry.keys()) - set(main_registry.keys())
+
+        if missing_in_agents:
+            logging.info(f"Applications présentes dans main mais absentes dans agents: {missing_in_agents}")
+        if missing_in_main:
+            logging.info(f"Applications présentes dans agents mais absentes dans main: {missing_in_main}")
+    except Exception as e:
+        logging.error(f"Error comparing memory files: {e}")

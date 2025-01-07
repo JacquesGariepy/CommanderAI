@@ -19,13 +19,16 @@ from .tasks.window_locator import WindowLocator
 from .agents.planner import STRIPSPlanner, ActionOperator, State
 
 # Configure logging
-logging.basicConfig(
-    level=logging.DEBUG,
-    format="%(asctime)s - %(levelname)s - %(message)s - [%(pathname)s:%(lineno)d]",
-    filename="commanderai.log",
-    filemode="a",
-)
+# logging.basicConfig(
+#     level=logging.DEBUG,
+#     format="%(asctime)s - %(levelname)s - %(message)s - [%(pathname)s:%(lineno)d]",
+#     filename="commanderai.log",
+#     filemode="a",
+# )
+logging.basicConfig(level=logging.DEBUG,
+                    format='%(asctime)s - %(levelname)s - %(message)s')
 
+logger = logging.getLogger(__name__)
 def speak_message(message):
     engine = pyttsx3.init()
     engine.say(message)
@@ -48,6 +51,7 @@ def recognize_speech():
 @click.command()
 @click.argument('command')
 def run(command):
+    logger.debug(f"CommanderAI command: {command}")
     if command == 'run':
         try:
             memory = PersistentMemory()
