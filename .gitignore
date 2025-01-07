@@ -2,9 +2,5 @@ commanderai/__pycache__/
 commanderai/agents/__pycache__/
 commanderai/tasks/__pycache__/
 commanderai/tools/__pycache__/
-<<<<<<< HEAD
 memory.json
-=======
-memory.json
-
->>>>>>> 403dc40 (add .env to gitignore)
+.env
