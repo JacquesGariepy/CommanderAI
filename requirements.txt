@@ -15,3 +15,5 @@ pyttsx3
 PyYAML
 pillow
 python-dotenv
+click
+tqdm

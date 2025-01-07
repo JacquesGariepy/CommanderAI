@@ -1,0 +1,5 @@
+commanderai/__pycache__/
+commanderai/agents/__pycache__/
+commanderai/tasks/__pycache__/
+commanderai/tools/__pycache__/
+memory.json
