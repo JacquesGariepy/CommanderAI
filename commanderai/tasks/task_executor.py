@@ -6,6 +6,7 @@ Exécute un plan JSON (open, interact, capture_screen).
 Valide et loggue succès/échecs.
 """
 import os
+import ast
 import logging
 import asyncio
 import json
