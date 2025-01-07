@@ -49,7 +49,7 @@ As a **proof of concept**, it demonstrates how various components can be integra
 - **Detailed logging**: Actions, errors, and debug info are logged to `automation.log`.
 
 ---
-## Exemples
+## Examples
 
 ```markdown
 Navigate to wikipedia.com with chrome and find the definition of AI
