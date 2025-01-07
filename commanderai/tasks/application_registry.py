@@ -1,5 +1,6 @@
 import os
 import logging
+import difflib
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 
@@ -43,20 +44,47 @@ class ApplicationRegistry:
         self.memory.update_memory("registry", self.registry)
 
     def find_executable(self, appname: str) -> Optional[str]:
-        logging.debug(f"Attempting to find executable: {appname}")
-        search = appname.lower()
+        """
+        Attempt to find an executable by `appname`. 
+        1) Exact lookup in self.registry
+        2) If not found, tries an approximate match using difflib
+        3) Return None if no suitable candidate is found
+        """
+        if not appname:
+            return None
+
+        search = appname.strip().lower()
+
+        # 1) Exact match
         if search in self.registry:
-            path = self.registry[search]["path"]
+            path = self.registry[search].get("path")
             if path and os.path.isfile(path):
                 return path
+
+        # 2) Fallback: approximate matching across the existing registry keys
+        all_keys = list(self.registry.keys())
+        matches = difflib.get_close_matches(search, all_keys, n=1, cutoff=0.6)
+        #  -> n=1 means we only care about the single best match
+        #  -> cutoff=0.6 requires at least 60% similarity to consider
+
+        if matches:
+            best_match = matches[0]
+            path = self.registry[best_match].get("path")
+            if path and os.path.isfile(path):
+                logging.debug(
+                    f"[ApplicationRegistry] Using approximate match '{best_match}' for '{search}' => {path}"
+                )
+                return path
+
+        # 3) If no match found, return None
         return None
 
     def list_tools(self) -> List[Dict[str, Any]]:
-        out = []
-        for k, v in self.registry.items():
-            if v["path"]:
-                out.append({"name": k, **v})
-        return out
+        return [
+            {"name": k, **v}
+            for k, v in self.registry.items()
+            if v.get("path") and os.path.isfile(v["path"])
+        ]
 
     def update_tool_stats(self, app_name: str, success: bool):
         try:
