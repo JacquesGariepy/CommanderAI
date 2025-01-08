@@ -17,18 +17,10 @@ from .tasks.application_registry import ApplicationRegistry
 from .tasks.screen_analyzer import ScreenAnalyzer
 from .tasks.window_locator import WindowLocator
 from .agents.planner import STRIPSPlanner, ActionOperator, State
+from .core.logging_config import setup_logging
 
-# Configure logging
-# logging.basicConfig(
-#     level=logging.DEBUG,
-#     format="%(asctime)s - %(levelname)s - %(message)s - [%(pathname)s:%(lineno)d]",
-#     filename="commanderai.log",
-#     filemode="a",
-# )
-logging.basicConfig(level=logging.DEBUG,
-                    format='%(asctime)s - %(levelname)s - %(message)s')
+setup_logging()
 
-logger = logging.getLogger(__name__)
 def speak_message(message):
     engine = pyttsx3.init()
     engine.say(message)
@@ -51,7 +43,6 @@ def recognize_speech():
 @click.command()
 @click.argument('command')
 def run(command):
-    logger.debug(f"CommanderAI command: {command}")
     if command == 'run':
         try:
             memory = PersistentMemory()
@@ -132,6 +123,8 @@ def run(command):
 
 if __name__ == "__main__":
     try:
+        logging.info("CommanderAI starting...")
+        print("CommanderAI starting...")
         run()
     except Exception as e:
         logging.critical(f"Unhandled => {e}")

@@ -5,10 +5,10 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional
 
 from ..tools.memory import PersistentMemory
-logging.basicConfig(level=logging.DEBUG)
 
 class ApplicationRegistry:
     def __init__(self, memory: PersistentMemory):
+        logging.debug("[ApplicationRegistry] init called")
         self.memory = memory
         self.registry: Dict[str, Dict[str, Any]] = self.memory.get("registry", {})
         self.ensure_defaults()

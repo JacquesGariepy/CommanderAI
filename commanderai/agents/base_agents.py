@@ -11,13 +11,13 @@ from typing import Dict, Any, List, Union, Optional, Tuple, Callable
 from .types import KQMLMessage, KQMLPerformative, Message, CommunicationProtocol, AgentType
 from .planner import STRIPSPlanner, State
 
-logging.basicConfig(level=logging.DEBUG)
-
 # On permet l'injection du manager
 agent_manager = None
 
 class BaseAgent:
     def __init__(self, agent_id: int, agent_type: AgentType):
+        logging.debug("[BaseAgent] init called")
+
         self.id = agent_id
         self.type = agent_type
 
@@ -174,10 +174,12 @@ class BaseAgent:
 
 class CognitiveAgent(BaseAgent):
     def __init__(self, agent_id: int):
+        logging.debug("[CognitiveAgent] init called")
         super().__init__(agent_id, AgentType.COGNITIVE)
 
 class ReactiveAgent(BaseAgent):
     def __init__(self, agent_id: int):
+        logging.debug("[ReactiveAgent] init called")
         super().__init__(agent_id, AgentType.REACTIVE)
         self.rules: List[Tuple[Callable[[Dict[str, Any]], bool], Callable[['ReactiveAgent'], None]]] = []
 
@@ -195,6 +197,7 @@ class ReactiveAgent(BaseAgent):
 
 class MediatorAgent(BaseAgent):
     def __init__(self, agent_id: int):
+        logging.debug("[MediatorAgent] init called")
         super().__init__(agent_id, AgentType.MEDIATOR)
 
     def _process_inbox(self):

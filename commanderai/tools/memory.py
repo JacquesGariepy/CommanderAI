@@ -9,13 +9,11 @@ import json
 import logging
 from typing import Any, Dict
 
-logging.basicConfig(level=logging.DEBUG)
-
 MEMORY_FILE = "memory.json"
 
 class PersistentMemory:
     def __init__(self):
-        logging.debug("Initializing PersistentMemory")
+        logging.debug("[PersistentMemory] init called")
         self.memory: Dict[str, Any] = {}
         self.load_memory()
 

@@ -7,19 +7,20 @@ Outils divers : ex. CalculatorTool, etc.
 import os
 import logging
 
-logging.basicConfig(level=logging.DEBUG)
-
 class Tool:
     def __init__(self, name: str, description: str):
+        logging.debug("[Tool] init called")
         self.name = name
         self.description = description
 
     def use(self, input_data: str) -> str:
         raise NotImplementedError()
 
+# Tool example: calculator
 class CalculatorTool(Tool):
     def __init__(self):
-        super().__init__("calculator", "Effectue des calculs mathématiques.")
+        logging.debug("[CalculatorTool] init called")
+        super().__init__("calculator", "Simple calculator tool.")
 
     def use(self, input_data: str) -> str:
         try:

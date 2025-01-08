@@ -14,9 +14,11 @@ import win32process
 import time
 from typing import Optional, Any
 
-logging.basicConfig(level=logging.DEBUG)
-
 class WindowLocator:
+    def __init__(self):
+        logging.debug("[WindowLocator] init called")
+        pass
+    
     @staticmethod
     def find_window_by_pid(pid: int) -> Optional[Any]:
         try:

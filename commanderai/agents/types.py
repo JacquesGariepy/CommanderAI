@@ -9,8 +9,6 @@ import logging
 from enum import Enum
 from typing import Union
 
-logging.basicConfig(level=logging.DEBUG)
-
 class KQMLPerformative(Enum):
     PROPOSE = "propose"
     ACCEPT = "accept"

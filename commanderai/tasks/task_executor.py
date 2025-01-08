@@ -15,6 +15,7 @@ import numpy as np
 from threading import Event
 from typing import Dict, Any, List
 
+from ..core.config import Config
 from .screen_analyzer import ScreenAnalyzer
 from .window_locator import WindowLocator
 from ..tools.memory import PersistentMemory
@@ -24,18 +25,46 @@ import pywinauto
 import pyautogui
 import psutil
 
-logging.basicConfig(level=logging.DEBUG)
-
 def compare_screens(before: np.ndarray, after: np.ndarray) -> bool:
+    logging.debug(f"[compare_screens] before: {before.shape}, after: {after.shape}")
     if before.shape != after.shape:
         return True
     diff = float((abs(before.astype(float) - after.astype(float))).sum())
     return diff > 1_000_000
 
+# not used at the moment but could be useful in the future
+def compare_memory_files(agents_memory_path: str, main_memory_path: str):
+    logging.debug(f"[compare_memory_files] {agents_memory_path} vs {main_memory_path}")
+    try:
+        with open(agents_memory_path, "r", encoding="utf-8") as f1, \
+             open(main_memory_path, "r", encoding="utf-8") as f2:
+            agents_data = json.load(f1)
+            main_data = json.load(f2)
+
+        agents_registry = agents_data.get("registry", {})
+        main_registry = main_data.get("registry", {})
+
+        missing_in_agents = set(main_registry.keys()) - set(agents_registry.keys())
+        missing_in_main = set(agents_registry.keys()) - set(main_registry.keys())
+
+        if missing_in_agents:
+            logging.info(f"Applications present in main but absent in agents: {missing_in_agents}")
+        if missing_in_main:
+            logging.info(f"Applications present in agents but absent in main: {missing_in_main}")
+    except Exception as e:
+        logging.error(f"Error comparing memory files: {e}")
+
 class InteractionStrategies:
     def __init__(self):
+        logging.debug("[InteractionStrategies] init called")
         self.last_interaction_time = 0
         self.MIN_DELAY = 0.5
+        self.openai_api_key = Config.OPENAI_API_KEY
+        # self.LLM_MODEL = Config.LLM_MODEL 
+        # self.MAX_RETRIES = Config.MAX_RETRIES
+        # self.MAX_TOKENS = Config.MAX_TOKENS
+        # self.TEMPERATURE = Config.TEMPERATURE
+        # self.TIMEOUT = Config.TIMEOUT
 
     def _enforce_delay(self):
         now = time.time()
@@ -53,13 +82,27 @@ class InteractionStrategies:
             try:
                 self._enforce_delay()
                 prompt_txt = f"""
-                You are an AI assistant specialized in automating user interfaces in Python.
+                You are an AI assistant specialized in automating user interfaces on Windows using Python.  
                 The user wants to: "{action_description}".
-                1. Provide fully functional code using 'pywinauto' or 'pyautogui'.
-                2. Code must be self-contained, no syntax errors.
-                3. Return only python code, no markdown.
+
+                Constraints:  
+                1. You must return strictly executable Python code with no special characters or Markdown formatting.  
+                2. The code must work with `pywinauto` or `pyautogui`.  
+                3. You may use the `window` object (already connected or previously obtained) to interact with the target window.  
+                4. Provide fully functional code using `pywinauto` or `pyautogui`.  
+                5. Code must be self-contained with no syntax errors.  
+                6. Return only Python code, no Markdown formatting or additional text.  
+
+                If the action requires a click, keyboard input, or any other type of interaction, code it using `pywinauto` or `pyautogui`.  
+                If necessary, handle exceptions (for example, by capturing errors if the window or control does not exist).  
+
+                Usage examples:  
+                - To click on an identified button, use `window['ButtonName'].click_input()` (`pywinauto`).  
+                - To type text, use `pyautogui.typewrite("my text")` or equivalent functions in `pywinauto`.  
+
+                Strictly follow these instructions and return only the final Python code.
                 """
-                llm = ChatOpenAI(api_key=os.environ.get("OPENAI_API_KEY"), model=os.environ.get("LLM_MODEL", "gpt-4o-mini"))
+                llm = ChatOpenAI(api_key=self.openai_api_key, model=self.LLM_MODEL)
                 chain = LLMChain(llm=llm, prompt=PromptTemplate.from_template(prompt_txt))
                 resp: AIMessage = chain.run({})
                 code = resp.strip().replace("```python", "").replace("```", "")
@@ -87,6 +130,7 @@ class InteractionStrategies:
 
 class TaskExecutor:
     def __init__(self, memory: PersistentMemory, app_registry):
+        logging.debug("[TaskExecutor] init called")
         self.memory = memory
         self.app_registry = app_registry
         self.stop_event = Event()
@@ -220,23 +264,3 @@ class TaskExecutor:
 
         success = self.strategies.interact(window, desc)
         return "Interaction successful" if success else "Interaction failed"
-
-def compare_memory_files(agents_memory_path: str, main_memory_path: str):
-    try:
-        with open(agents_memory_path, "r", encoding="utf-8") as f1, \
-             open(main_memory_path, "r", encoding="utf-8") as f2:
-            agents_data = json.load(f1)
-            main_data = json.load(f2)
-
-        agents_registry = agents_data.get("registry", {})
-        main_registry = main_data.get("registry", {})
-
-        missing_in_agents = set(main_registry.keys()) - set(agents_registry.keys())
-        missing_in_main = set(agents_registry.keys()) - set(main_registry.keys())
-
-        if missing_in_agents:
-            logging.info(f"Applications présentes dans main mais absentes dans agents: {missing_in_agents}")
-        if missing_in_main:
-            logging.info(f"Applications présentes dans agents mais absentes dans main: {missing_in_main}")
-    except Exception as e:
-        logging.error(f"Error comparing memory files: {e}")

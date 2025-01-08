@@ -4,3 +4,4 @@ commanderai/tasks/__pycache__/
 commanderai/tools/__pycache__/
 memory.json
 .env
+commanderai/core/__pycache__/

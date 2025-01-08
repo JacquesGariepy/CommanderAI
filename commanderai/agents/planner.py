@@ -9,10 +9,9 @@ import logging
 from collections import deque
 from typing import Dict, Any, List, Optional, Tuple, Set
 
-logging.basicConfig(level=logging.DEBUG)
-
 class State:
     def __init__(self, facts: Dict[str, Any]):
+        logging.debug("[State] init called")
         self.facts = dict(facts)
 
     def is_goal_satisfied(self, goal: Dict[str, Any]) -> bool:
@@ -30,6 +29,8 @@ class State:
 
 class ActionOperator:
     def __init__(self, name: str, preconds: Dict[str, Any], effects: Dict[str, Any]):
+        logging.debug("[ActionOperator] init called")
+
         self.name = name
         self.preconds = dict(preconds)
         self.effects = dict(effects)
@@ -51,6 +52,7 @@ class ActionOperator:
 
 class STRIPSPlanner:
     def __init__(self, operators: List[ActionOperator]):
+        logging.debug("[STRIPSPlanner] init called")
         self.operators = operators
 
     def plan(self, init_state: State, goal: Dict[str, Any]) -> Optional[List[str]]:

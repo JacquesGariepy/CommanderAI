@@ -14,8 +14,6 @@ import pytesseract
 from PIL import Image
 from typing import Tuple, List, Dict, Any, Optional
 
-logging.basicConfig(level=logging.DEBUG)
-
 TESSERACT_CONFIG = r'--oem 3 --psm 6'
 MIN_ELEMENT_WIDTH = 20
 MAX_ELEMENT_WIDTH = 300
@@ -24,7 +22,7 @@ MAX_ELEMENT_HEIGHT = 100
 
 class ScreenAnalyzer:
     def __init__(self):
-        logging.info("[ScreenAnalyzer] init")
+        logging.debug("[ScreenAnalyzer] init called")
         self.screen_capture = mss.mss()
         self.screen_capture_lock = asyncio.Lock()
 
