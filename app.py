@@ -6,15 +6,24 @@ import asyncio
 import logging
 import re
 import time
+import configparser
+import shlex
 from pathlib import Path
 from typing import List, Dict, Any, Literal, Tuple, Optional, TypedDict, Union
 import subprocess
 import pyautogui
 import psutil
-import pywinauto
-import win32gui
-import win32process
-from pywinauto import Application
+import platform
+
+IS_WINDOWS = platform.system() == "Windows"
+
+if IS_WINDOWS:
+    import pywinauto
+    import win32gui
+    import win32process
+    from pywinauto import Application
+else:
+    import pygetwindow as gw
 from threading import Event
 from langchain.prompts import PromptTemplate
 from langchain.chat_models import ChatOpenAI
@@ -315,19 +324,65 @@ class ApplicationRegistry:
 
             for path in paths:
                 path_obj = Path(path)
-                if path_obj.is_dir():
-                    for exe in path_obj.glob("*.exe"):
-                        tool_name = exe.stem.lower()
-                        if tool_name not in self.registry:
-                            self.registry[tool_name] = {
-                                "path": str(exe),
-                                "type": "executable",
-                                "source": "PATH",
-                                "launch_count": 0,
-                                "success_count": 0,
-                                "failure_count": 0
-                            }
-                            logging.debug(f"Discovered tool: {tool_name}")
+                if not path_obj.is_dir():
+                    continue
+
+                if IS_WINDOWS:
+                    candidates = path_obj.glob("*.exe")
+                else:
+                    candidates = (
+                        p for p in path_obj.iterdir()
+                        if p.is_file() and os.access(p, os.X_OK)
+                    )
+
+            for exe in candidates:
+                tool_name = exe.stem.lower() if IS_WINDOWS else exe.name.lower()
+                if tool_name not in self.registry:
+                    self.registry[tool_name] = {
+                        "path": str(exe),
+                        "type": "executable",
+                        "source": "PATH",
+                        "launch_count": 0,
+                        "success_count": 0,
+                        "failure_count": 0
+                    }
+                    logging.debug(f"Discovered tool: {tool_name}")
+
+            if not IS_WINDOWS:
+                desktop_dirs = [
+                    Path("/usr/share/applications"),
+                    Path.home() / ".local/share/applications",
+                ]
+                for ddir in desktop_dirs:
+                    if not ddir.is_dir():
+                        continue
+                    for desktop_file in ddir.glob("*.desktop"):
+                        try:
+                            config = configparser.ConfigParser(interpolation=None)
+                            config.read(desktop_file, encoding="utf-8")
+                            if "Desktop Entry" not in config:
+                                continue
+                            entry = config["Desktop Entry"]
+                            name = entry.get("Name")
+                            exec_cmd = entry.get("Exec", "").strip()
+                            if not name or not exec_cmd:
+                                continue
+                            exec_path = shlex.split(exec_cmd)[0]
+                            tool_name = name.lower()
+                            if tool_name not in self.registry:
+                                self.registry[tool_name] = {
+                                    "path": exec_path,
+                                    "type": "desktop",
+                                    "source": "desktop",
+                                    "launch_count": 0,
+                                    "success_count": 0,
+                                    "failure_count": 0,
+                                }
+                                logging.debug(
+                                    f"Discovered desktop entry: {tool_name} -> {exec_path}"
+                                )
+                        except Exception as e:
+                            logging.debug(f"Failed to parse {desktop_file}: {e}")
 
             self.memory.update_memory("registry", self.registry)
             logging.info("Tool discovery completed.")
@@ -395,32 +450,44 @@ class WindowLocator:
     def find_window_by_pid(pid: int) -> Optional[Any]:
         """Locate a window by its PID."""
         try:
-            def callback(handle, windows):
-                try:
-                    _, process_id = win32process.GetWindowThreadProcessId(handle)
-                    if process_id == pid:
-                        visible = win32gui.IsWindowVisible(handle)
-                        logging.debug(f"Window found - PID: {pid}, Handle: {handle}, Visible: {visible}")
-                        if visible:
-                            windows.append(handle)
-                except Exception as e:
-                    logging.error(f"Error in window callback: {e}", exc_info=True)
-                return True
+            if IS_WINDOWS:
+                def callback(handle, windows):
+                    try:
+                        _, process_id = win32process.GetWindowThreadProcessId(handle)
+                        if process_id == pid:
+                            visible = win32gui.IsWindowVisible(handle)
+                            logging.debug(
+                                f"Window found - PID: {pid}, Handle: {handle}, Visible: {visible}"
+                            )
+                            if visible:
+                                windows.append(handle)
+                    except Exception as e:
+                        logging.error(f"Error in window callback: {e}", exc_info=True)
+                    return True
 
-            windows = []
-            win32gui.EnumWindows(callback, windows)
+                windows = []
+                win32gui.EnumWindows(callback, windows)
 
-            if windows:
-                logging.info(f"Windows found for PID {pid}: {len(windows)}")
-                try:
-                    window = Application().connect(handle=windows[0])
-                    logging.debug(f"Successfully connected to handle {windows[0]}")
-                    return window.window(handle=windows[0])
-                except Exception as e:
-                    logging.error(f"Failed to connect to window: {e}", exc_info=True)
-                    return None
-            else:
+                if windows:
+                    logging.info(f"Windows found for PID {pid}: {len(windows)}")
+                    try:
+                        window = Application().connect(handle=windows[0])
+                        logging.debug(f"Successfully connected to handle {windows[0]}")
+                        return window.window(handle=windows[0])
+                    except Exception as e:
+                        logging.error(f"Failed to connect to window: {e}", exc_info=True)
+                        return None
                 logging.warning(f"No visible window found for PID {pid}")
+                return None
+            else:
+                for window in gw.getAllWindows():
+                    try:
+                        if window.pid == pid:
+                            logging.info(f"Window found for PID {pid}")
+                            return window
+                    except Exception:
+                        continue
+                logging.warning(f"No window found for PID {pid}")
                 return None
         except Exception as e:
             logging.error(f"Error finding window by PID: {e}", exc_info=True)
@@ -440,13 +507,14 @@ class WindowLocator:
                                 return window
                     except (psutil.NoSuchProcess, psutil.AccessDenied):
                         continue
-
             except Exception as e:
                 logging.error(f"Error during attempt {attempt} to find window: {e}")
 
             time.sleep(delay)
 
-        logging.error(f"Failed to find window for '{executable_name}' after {retries} attempts")
+        logging.error(
+            f"Failed to find window for '{executable_name}' after {retries} attempts"
+        )
         return None
 
     @staticmethod
@@ -484,11 +552,18 @@ class WindowLocator:
     def _prepare_window(window) -> None:
         """Prepare the window for interaction."""
         try:
-            if window.is_minimized():
-                window.restore()
-            if not window.is_visible():
-                window.set_focus()
-            logging.info(f"Window prepared: {window.window_text()}")
+            if IS_WINDOWS:
+                if window.is_minimized():
+                    window.restore()
+                if not window.is_visible():
+                    window.set_focus()
+                logging.info(f"Window prepared: {window.window_text()}")
+            else:
+                if window.isMinimized:
+                    window.restore()
+                if not window.isActive:
+                    window.activate()
+                logging.info(f"Window prepared: {window.title}")
         except Exception as e:
             logging.error(f"Error preparing window: {e}")
 
