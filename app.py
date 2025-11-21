@@ -1,3 +1,19 @@
+"""Pensée profonde — Agentic AI :
+L’IA agentique n’est pas la liberté d’agir, mais la capacité d’assumer : percevoir → choisir → supporter les conséquences → se réengager mieux, boucle après boucle. Sans mémoire des conséquences, un agent n’est qu’une macro rapide.
+
+En clair :
+Une IA agentique, ce n’est pas seulement agir toute seule; c’est boucler : voir ce qui se passe → décider → assumer le résultat (bon ou mauvais) → apprendre → repartir un peu meilleure. Si elle n’enregistre pas les effets de ses actions, ce n’est qu’une macro qui répète, pas un agent.
+
+Exemple concret (développement) :
+1) L’agent modifie une configuration et déploie.
+2) Il observe les effets : tests rouges, latence en hausse.
+3) Il assume : rollback, alerte, comparaison avant/après.
+4) Il apprend : “tel changement casse X”, met à jour ses règles et sa mémoire.
+5) Il réessaie autrement.
+
+À retenir : autonomie + mémoire des conséquences + amélioration continue = agent. Sans mémoire ni apprentissage des résultats, c’est de l’automatisation, pas de l’agentic AI.
+"""
+
 import ast
 import locale
 import os
@@ -131,6 +147,30 @@ class PersistentMemory:
     def get(self, key: str, default: Any = None) -> Any:
         logging.debug(f"Getting memory: {key}")
         return self.memory.get(key, default)
+
+    def append_history(self, entry: Dict[str, Any]):
+        """Append an action result to the memory history with timestamp."""
+        try:
+            entry_with_time = {**entry, "timestamp": time.time()}
+            history = self.memory.setdefault("action_history", [])
+            history.append(entry_with_time)
+            self.save_memory()
+            logging.debug(f"History updated with entry: {entry_with_time}")
+        except Exception as e:
+            logging.error(f"Error appending history: {e}")
+
+    def get_last_action_result(self, action: str, details: Any = None) -> Optional[Dict[str, Any]]:
+        """Retrieve the most recent history entry for a given action."""
+        try:
+            history = self.memory.get("action_history", [])
+            for entry in reversed(history):
+                if entry.get("action") == action and (
+                    details is None or entry.get("details") == details
+                ):
+                    return entry
+        except Exception as e:
+            logging.error(f"Error retrieving last action result: {e}")
+        return None
 
 class ScreenAnalyzer:
     def __init__(self):
@@ -661,6 +701,19 @@ class TaskExecutor:
                     return json.dumps({"status": "interrupted", "results": results})
 
                 action = step.get("action")
+                last = self.app_registry.memory.get_last_action_result(
+                    action, step.get("details")
+                )
+                if last and last.get("status") == "failure":
+                    skip_entry = {
+                        "action": action,
+                        "status": "skipped",
+                        "details": "skipped due to previous failure",
+                    }
+                    results.append(skip_entry)
+                    self.app_registry.memory.append_history(skip_entry)
+                    continue
+
                 step_result = {"action": action, "status": "failure", "details": None}
 
                 try:
@@ -684,6 +737,12 @@ class TaskExecutor:
                     step_result["details"] = str(step_error)
 
                 results.append(step_result)
+
+                self.app_registry.memory.append_history({
+                    "action": action,
+                    "status": step_result["status"],
+                    "details": step_result.get("details")
+                })
 
                 if step_result["status"] == "failure":
                     break

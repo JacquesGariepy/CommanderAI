@@ -212,6 +212,8 @@ This integration showcases how LLMs can aid in automation scenarios.
 
 - `PersistentMemory` reads/writes `memory.json` to persist state across sessions.
 - `ApplicationRegistry` maintains a list of discovered apps and usage stats.
+- Action history is stored in `memory.json`, logging each executed step with its outcome and timestamp for future reference.
+- `TaskExecutor` consults this history and skips repeating steps that previously failed, enabling basic agentic behavior.
 
 ---
 
