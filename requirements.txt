@@ -1,9 +1,6 @@
 pyautogui
 psutil
-pywinauto
 openai
-pywin32
-pywinauto
 langchain
 langchain_community
 mss
@@ -15,3 +12,6 @@ pyttsx3
 PyYAML
 pillow
 python-dotenv
+pygetwindow; platform_system != "Windows"
+pywinauto; platform_system == "Windows"
+pywin32; platform_system == "Windows"

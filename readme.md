@@ -1,4 +1,4 @@
-# CommanderAI / LLM-Driven Action Generation on Windows
+# CommanderAI / LLM-Driven Action Generation on Windows and Linux (WSL)
 
 > The system interprets requests and dynamically generates Python code to interact with applications with Langchain (openai).
 
@@ -30,7 +30,7 @@
 
 ## General Description
 
-This project is an intelligent automation system designed to interact with Windows applications and LLM, analyze the screen, recognize speech, speak responses, execute planned tasks, and interact with user interfaces in an automated manner. It leverages advanced language models (via the OpenAI API), langchain, speech recognition, text-to-speech, screen capture, text recognition (OCR), and application interaction through tools like pywinauto and pyautogui.
+This project is an intelligent automation system designed to interact with Windows and Linux (WSL) applications and LLM, analyze the screen, recognize speech, speak responses, execute planned tasks, and interact with user interfaces in an automated manner. It leverages advanced language models (via the OpenAI API), langchain, speech recognition, text-to-speech, screen capture, text recognition (OCR), and application interaction through tools like pywinauto, pygetwindow and pyautogui.
 
 As a **proof of concept**, it demonstrates how various components can be integrated to automate different tasks. It serves as an example and inspiration, but further study and hardening are needed before using it in a real-world environment.
 
@@ -47,6 +47,7 @@ As a **proof of concept**, it demonstrates how various components can be integra
 - **Dynamic Python code generation**: Utilizes a LLM (ChatOpenAI) to produce UI interaction code based on natural language descriptions.
 - **Persistent memory**: Stores state and application registry in `memory.json`.
 - **Detailed logging**: Actions, errors, and debug info are logged to `automation.log`.
+- **Linux app discovery**: Scans common `.desktop` locations to register installed applications.
 
 ---
 ## Examples
@@ -102,7 +103,7 @@ TaskPlan = {
 
 ## Prerequisites
 
-- **Operating System**: Windows (required for pywinauto, win32gui, etc.).
+- **Operating System**: Windows or Linux (WSL). Windows relies on `pywinauto`/`pywin32`, while Linux support uses `pygetwindow`.
 - Python 3.8+ recommended.
 - An OpenAI API key
 - Microphone and speakers (for voice recognition and text-to-speech).
