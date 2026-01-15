@@ -139,9 +139,397 @@ try:
 except Exception:
     system_language = "en_US"
 
-llm_model = "gpt-4o-mini"
 load_dotenv()
-openai_api_key = os.environ.get("OPENAI_API_KEY")
+
+# LLM Provider Configuration
+LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "openai").lower()  # openai, lmstudio, ollama
+LLM_MODEL = os.environ.get("LLM_MODEL", "gpt-4o-mini")
+LLM_BASE_URL = os.environ.get("LLM_BASE_URL", None)  # For LM Studio: http://localhost:1234/v1
+openai_api_key = os.environ.get("OPENAI_API_KEY", "")
+
+
+class LLMProviderConfig:
+    """Configuration for different LLM providers."""
+
+    PROVIDERS = {
+        "openai": {
+            "name": "OpenAI",
+            "default_model": "gpt-4o-mini",
+            "base_url": None,
+            "requires_api_key": True
+        },
+        "lmstudio": {
+            "name": "LM Studio",
+            "default_model": "local-model",
+            "base_url": "http://localhost:1234/v1",
+            "requires_api_key": False
+        },
+        "ollama": {
+            "name": "Ollama",
+            "default_model": "llama3.2",
+            "base_url": "http://localhost:11434/v1",
+            "requires_api_key": False
+        },
+        "anthropic": {
+            "name": "Anthropic",
+            "default_model": "claude-3-5-sonnet-20241022",
+            "base_url": None,
+            "requires_api_key": True
+        },
+        "groq": {
+            "name": "Groq",
+            "default_model": "llama-3.3-70b-versatile",
+            "base_url": "https://api.groq.com/openai/v1",
+            "requires_api_key": True
+        },
+        "together": {
+            "name": "Together AI",
+            "default_model": "meta-llama/Llama-3.3-70B-Instruct-Turbo",
+            "base_url": "https://api.together.xyz/v1",
+            "requires_api_key": True
+        }
+    }
+
+    @classmethod
+    def get_config(cls, provider: str) -> Dict[str, Any]:
+        """Get configuration for a provider."""
+        return cls.PROVIDERS.get(provider.lower(), cls.PROVIDERS["openai"])
+
+    @classmethod
+    def list_providers(cls) -> List[str]:
+        """List all available providers."""
+        return list(cls.PROVIDERS.keys())
+
+
+def get_llm_client():
+    """Get the appropriate LLM client based on configuration."""
+    provider_config = LLMProviderConfig.get_config(LLM_PROVIDER)
+
+    # Determine base URL
+    base_url = LLM_BASE_URL or provider_config.get("base_url")
+
+    # Determine model
+    model = LLM_MODEL if LLM_MODEL != "gpt-4o-mini" else provider_config.get("default_model", "gpt-4o-mini")
+
+    # Determine API key
+    api_key = openai_api_key
+    if not provider_config.get("requires_api_key"):
+        api_key = "not-needed"  # LM Studio and Ollama don't need real API keys
+
+    # Create ChatOpenAI instance (works with OpenAI-compatible APIs)
+    kwargs = {
+        "api_key": api_key,
+        "model": model
+    }
+    if base_url:
+        kwargs["base_url"] = base_url
+
+    logging.info(f"Using LLM provider: {provider_config['name']}, model: {model}")
+    return ChatOpenAI(**kwargs)
+
+
+# Legacy variable for backward compatibility
+llm_model = LLM_MODEL
+
+
+class AICLITools:
+    """Manages AI CLI tools like Claude Code, GitHub Copilot, Gemini, etc."""
+
+    # Known AI CLI tools with their commands and detection methods
+    KNOWN_TOOLS = {
+        "claude": {
+            "command": "claude",
+            "name": "Claude Code",
+            "check_args": ["--version"],
+            "description": "Anthropic's Claude Code CLI"
+        },
+        "gh_copilot": {
+            "command": "gh",
+            "name": "GitHub Copilot CLI",
+            "check_args": ["copilot", "--help"],
+            "description": "GitHub Copilot in the CLI"
+        },
+        "gemini": {
+            "command": "gemini",
+            "name": "Google Gemini CLI",
+            "check_args": ["--version"],
+            "description": "Google Gemini CLI"
+        },
+        "aider": {
+            "command": "aider",
+            "name": "Aider",
+            "check_args": ["--version"],
+            "description": "AI pair programming in your terminal"
+        },
+        "copilot": {
+            "command": "github-copilot-cli",
+            "name": "GitHub Copilot CLI (standalone)",
+            "check_args": ["--version"],
+            "description": "GitHub Copilot CLI standalone"
+        },
+        "cody": {
+            "command": "cody",
+            "name": "Sourcegraph Cody",
+            "check_args": ["--version"],
+            "description": "Sourcegraph Cody AI assistant"
+        },
+        "cursor": {
+            "command": "cursor",
+            "name": "Cursor",
+            "check_args": ["--version"],
+            "description": "Cursor AI-powered editor CLI"
+        },
+        "continue": {
+            "command": "continue",
+            "name": "Continue",
+            "check_args": ["--version"],
+            "description": "Continue AI coding assistant"
+        },
+        "ollama": {
+            "command": "ollama",
+            "name": "Ollama",
+            "check_args": ["--version"],
+            "description": "Run LLMs locally"
+        },
+        "llm": {
+            "command": "llm",
+            "name": "LLM CLI",
+            "check_args": ["--version"],
+            "description": "Simon Willison's LLM CLI tool"
+        },
+        "lmstudio": {
+            "command": "lms",
+            "name": "LM Studio",
+            "check_args": ["--version"],
+            "description": "LM Studio CLI for local LLMs"
+        }
+    }
+
+    def __init__(self):
+        self.available_tools: Dict[str, Dict[str, Any]] = {}
+        self._discover_tools()
+
+    def _discover_tools(self):
+        """Discover available AI CLI tools on the system."""
+        import shutil
+
+        logging.info("Discovering AI CLI tools...")
+
+        for tool_id, tool_info in self.KNOWN_TOOLS.items():
+            cmd = tool_info["command"]
+
+            # Check if command exists in PATH
+            cmd_path = shutil.which(cmd)
+            if not cmd_path:
+                continue
+
+            # Verify the tool works
+            try:
+                result = subprocess.run(
+                    [cmd] + tool_info["check_args"],
+                    capture_output=True,
+                    text=True,
+                    timeout=10
+                )
+                # Tool is available if it doesn't error out completely
+                if result.returncode in [0, 1]:  # Some tools return 1 for --help
+                    self.available_tools[tool_id] = {
+                        **tool_info,
+                        "path": cmd_path,
+                        "available": True
+                    }
+                    logging.info(f"Found AI CLI tool: {tool_info['name']} at {cmd_path}")
+            except (subprocess.TimeoutExpired, FileNotFoundError, Exception) as e:
+                logging.debug(f"Tool {cmd} not available: {e}")
+
+        logging.info(f"Discovered {len(self.available_tools)} AI CLI tools")
+
+    def list_available(self) -> List[Dict[str, Any]]:
+        """List all available AI CLI tools."""
+        return [
+            {"id": k, **v}
+            for k, v in self.available_tools.items()
+        ]
+
+    def is_available(self, tool_id: str) -> bool:
+        """Check if a specific tool is available."""
+        return tool_id in self.available_tools
+
+    def get_preferred_tool(self) -> Optional[str]:
+        """Get the preferred AI CLI tool (first available)."""
+        # Priority order
+        priority = ["claude", "gh_copilot", "aider", "cody", "gemini", "ollama", "llm"]
+        for tool_id in priority:
+            if tool_id in self.available_tools:
+                return tool_id
+        # Return first available if none in priority list
+        if self.available_tools:
+            return next(iter(self.available_tools))
+        return None
+
+    async def execute_with_claude(self, prompt: str, working_dir: Optional[str] = None) -> str:
+        """Execute a prompt using Claude Code CLI."""
+        if "claude" not in self.available_tools:
+            raise RuntimeError("Claude Code CLI is not available")
+
+        cmd = ["claude", "--print", prompt]
+        try:
+            result = await asyncio.to_thread(
+                subprocess.run,
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=120,
+                cwd=working_dir
+            )
+            return result.stdout or result.stderr
+        except subprocess.TimeoutExpired:
+            return "Error: Claude Code CLI timed out"
+        except Exception as e:
+            return f"Error: {str(e)}"
+
+    async def execute_with_gh_copilot(self, prompt: str, mode: str = "explain") -> str:
+        """Execute a prompt using GitHub Copilot CLI."""
+        if "gh_copilot" not in self.available_tools:
+            raise RuntimeError("GitHub Copilot CLI is not available")
+
+        # Modes: explain, suggest
+        cmd = ["gh", "copilot", mode, prompt]
+        try:
+            result = await asyncio.to_thread(
+                subprocess.run,
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=60
+            )
+            return result.stdout or result.stderr
+        except subprocess.TimeoutExpired:
+            return "Error: GitHub Copilot CLI timed out"
+        except Exception as e:
+            return f"Error: {str(e)}"
+
+    async def execute_with_ollama(self, prompt: str, model: str = "llama2") -> str:
+        """Execute a prompt using Ollama."""
+        if "ollama" not in self.available_tools:
+            raise RuntimeError("Ollama is not available")
+
+        cmd = ["ollama", "run", model, prompt]
+        try:
+            result = await asyncio.to_thread(
+                subprocess.run,
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=120
+            )
+            return result.stdout or result.stderr
+        except subprocess.TimeoutExpired:
+            return "Error: Ollama timed out"
+        except Exception as e:
+            return f"Error: {str(e)}"
+
+    async def execute_with_llm(self, prompt: str, model: Optional[str] = None) -> str:
+        """Execute a prompt using LLM CLI."""
+        if "llm" not in self.available_tools:
+            raise RuntimeError("LLM CLI is not available")
+
+        cmd = ["llm", prompt]
+        if model:
+            cmd = ["llm", "-m", model, prompt]
+
+        try:
+            result = await asyncio.to_thread(
+                subprocess.run,
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=120
+            )
+            return result.stdout or result.stderr
+        except subprocess.TimeoutExpired:
+            return "Error: LLM CLI timed out"
+        except Exception as e:
+            return f"Error: {str(e)}"
+
+    async def execute_with_lmstudio(self, prompt: str, model: Optional[str] = None) -> str:
+        """Execute a prompt using LM Studio CLI."""
+        if "lmstudio" not in self.available_tools:
+            raise RuntimeError("LM Studio CLI is not available")
+
+        cmd = ["lms", "chat", prompt]
+        if model:
+            cmd = ["lms", "chat", "--model", model, prompt]
+
+        try:
+            result = await asyncio.to_thread(
+                subprocess.run,
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=120
+            )
+            return result.stdout or result.stderr
+        except subprocess.TimeoutExpired:
+            return "Error: LM Studio CLI timed out"
+        except Exception as e:
+            return f"Error: {str(e)}"
+
+    async def execute_with_aider(self, prompt: str, working_dir: Optional[str] = None) -> str:
+        """Execute a prompt using Aider."""
+        if "aider" not in self.available_tools:
+            raise RuntimeError("Aider is not available")
+
+        cmd = ["aider", "--message", prompt, "--yes"]
+        try:
+            result = await asyncio.to_thread(
+                subprocess.run,
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=300,
+                cwd=working_dir
+            )
+            return result.stdout or result.stderr
+        except subprocess.TimeoutExpired:
+            return "Error: Aider timed out"
+        except Exception as e:
+            return f"Error: {str(e)}"
+
+    async def execute_prompt(self, prompt: str, tool_id: Optional[str] = None) -> str:
+        """Execute a prompt with the specified or preferred AI CLI tool."""
+        if tool_id is None:
+            tool_id = self.get_preferred_tool()
+
+        if tool_id is None:
+            return "Error: No AI CLI tools available"
+
+        if tool_id == "claude":
+            return await self.execute_with_claude(prompt)
+        elif tool_id == "gh_copilot":
+            return await self.execute_with_gh_copilot(prompt)
+        elif tool_id == "ollama":
+            return await self.execute_with_ollama(prompt)
+        elif tool_id == "llm":
+            return await self.execute_with_llm(prompt)
+        elif tool_id == "lmstudio":
+            return await self.execute_with_lmstudio(prompt)
+        elif tool_id == "aider":
+            return await self.execute_with_aider(prompt)
+        else:
+            return f"Error: Tool {tool_id} execution not implemented"
+
+
+# Global AI CLI tools instance
+ai_cli_tools: Optional[AICLITools] = None
+
+def get_ai_cli_tools() -> AICLITools:
+    """Get or create the AI CLI tools instance."""
+    global ai_cli_tools
+    if ai_cli_tools is None:
+        ai_cli_tools = AICLITools()
+    return ai_cli_tools
+
 
 # Initialize text-to-speech engine
 engine = pyttsx3.init()
@@ -779,7 +1167,7 @@ class InteractionStrategies:
 
                 Provide only the Python code.
                 """
-                llm = ChatOpenAI(api_key=openai_api_key, model=llm_model)
+                llm = get_llm_client()
                 chain = LLMChain(llm=llm, prompt=PromptTemplate.from_template(prompt))
                 response: AIMessage = chain.run({})
                 logging.debug(f"Generated code for interaction: {response}")
@@ -1091,7 +1479,7 @@ class TaskInterpreter:
                 """
             )
 
-            llm = ChatOpenAI(api_key=openai_api_key, model=llm_model)
+            llm = get_llm_client()
             chain = prompt_template | llm
 
             response = await chain.ainvoke({
@@ -1213,12 +1601,59 @@ async def main():
                     speak_message("Shutting down the system. Goodbye.")
                     break
                 elif "help" in user_request:
-                    speak_message("You can ask me to perform tasks on your computer.")
+                    help_text = """Available commands:
+- 'list': List available applications
+- 'ai tools': List available AI CLI tools (Claude, Copilot, etc.)
+- 'provider': Show current LLM provider
+- 'providers': List all supported LLM providers
+- 'sample': Run a sample automation task
+- 'exit': Quit the program
+Or just describe what you want to do!"""
+                    print(help_text)
+                    speak_message("Check the console for available commands.")
+                    continue
+                elif "ai tools" in user_request or "ai cli" in user_request:
+                    # List available AI CLI tools
+                    cli_tools = get_ai_cli_tools()
+                    available = cli_tools.list_available()
+                    if available:
+                        tool_list = ", ".join([t["name"] for t in available])
+                        print(f"\nAvailable AI CLI tools: {tool_list}")
+                        for tool in available:
+                            print(f"  - {tool['name']}: {tool['description']}")
+                        speak_message(f"Found {len(available)} AI CLI tools: {tool_list}")
+                    else:
+                        speak_message("No AI CLI tools found. Install claude, gh copilot, ollama, or aider.")
+                    continue
+                elif user_request == "provider":
+                    # Show current provider
+                    provider_config = LLMProviderConfig.get_config(LLM_PROVIDER)
+                    print(f"\nCurrent LLM Provider: {provider_config['name']}")
+                    print(f"Model: {LLM_MODEL}")
+                    if LLM_BASE_URL:
+                        print(f"Base URL: {LLM_BASE_URL}")
+                    speak_message(f"Using {provider_config['name']} with model {LLM_MODEL}")
+                    continue
+                elif "providers" in user_request:
+                    # List all providers
+                    print("\nSupported LLM Providers:")
+                    for name, config in LLMProviderConfig.PROVIDERS.items():
+                        print(f"  - {name}: {config['name']} (default model: {config['default_model']})")
+                    print("\nSet provider via environment variables:")
+                    print("  LLM_PROVIDER=lmstudio  (or openai, ollama, groq, etc.)")
+                    print("  LLM_MODEL=your-model")
+                    print("  LLM_BASE_URL=http://localhost:1234/v1  (for local providers)")
+                    speak_message("Check the console for supported providers.")
                     continue
                 elif "list" in user_request:
                     tools = app_registry.list_tools()
                     tool_names = [tool["name"] for tool in tools]
-                    speak_message(f"Available applications: {', '.join(tool_names)}")
+                    speak_message(f"Available applications: {', '.join(tool_names[:10])}...")
+                    print(f"\nAll applications ({len(tool_names)} total):")
+                    for name in sorted(tool_names)[:20]:
+                        print(f"  - {name}")
+                    if len(tool_names) > 20:
+                        print(f"  ... and {len(tool_names) - 20} more")
                     continue
                 elif "sample" in user_request:
                     # Example task plan - platform-adaptive
