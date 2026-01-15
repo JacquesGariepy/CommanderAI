@@ -133,7 +133,11 @@ MAX_ELEMENT_WIDTH = 300
 MIN_ELEMENT_HEIGHT = 20
 MAX_ELEMENT_HEIGHT = 100
 
-system_language = locale.getdefaultlocale()[0]
+# Get system language (compatible with Python 3.15+)
+try:
+    system_language = locale.getlocale()[0] or os.environ.get("LANG", "en_US").split(".")[0]
+except Exception:
+    system_language = "en_US"
 
 llm_model = "gpt-4o-mini"
 load_dotenv()
