@@ -16,7 +16,10 @@ import psutil
 import platform
 
 IS_WINDOWS = platform.system() == "Windows"
+IS_MACOS = platform.system() == "Darwin"
+IS_LINUX = platform.system() == "Linux"
 
+# Platform-specific imports
 if IS_WINDOWS:
     import pywinauto
     import win32gui
@@ -24,6 +27,14 @@ if IS_WINDOWS:
     from pywinauto import Application
 else:
     import pygetwindow as gw
+    # For macOS, we may need additional imports
+    if IS_MACOS:
+        try:
+            from AppKit import NSWorkspace, NSRunningApplication
+            APPKIT_AVAILABLE = True
+        except ImportError:
+            APPKIT_AVAILABLE = False
+            logging.warning("AppKit not available on macOS - some features may be limited")
 from threading import Event
 from langchain.prompts import PromptTemplate
 from langchain.chat_models import ChatOpenAI
@@ -48,9 +59,75 @@ logging.basicConfig(
     filemode="a",
 )
 
-# Constants
-MEMORY_FILE = "memory.json"
+# Constants - Platform-appropriate paths
+def get_app_data_dir() -> Path:
+    """Get the appropriate application data directory for the current platform."""
+    if IS_WINDOWS:
+        base = Path(os.environ.get("APPDATA", Path.home()))
+    elif IS_MACOS:
+        base = Path.home() / "Library" / "Application Support"
+    else:  # Linux and others
+        base = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share"))
+
+    app_dir = base / "CommanderAI"
+    app_dir.mkdir(parents=True, exist_ok=True)
+    return app_dir
+
+MEMORY_FILE = str(get_app_data_dir() / "memory.json")
 TESSERACT_CONFIG = r'--oem 3 --psm 6'
+
+# Configure Tesseract path based on platform
+def configure_tesseract():
+    """Configure Tesseract OCR path for the current platform."""
+    import shutil
+    if IS_WINDOWS:
+        # Common Windows installation paths
+        windows_paths = [
+            r"C:\Program Files\Tesseract-OCR\tesseract.exe",
+            r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe",
+        ]
+        for path in windows_paths:
+            if os.path.isfile(path):
+                pytesseract.pytesseract.tesseract_cmd = path
+                return
+    elif IS_MACOS:
+        # Common macOS installation paths (Homebrew)
+        macos_paths = [
+            "/usr/local/bin/tesseract",
+            "/opt/homebrew/bin/tesseract",
+        ]
+        for path in macos_paths:
+            if os.path.isfile(path):
+                pytesseract.pytesseract.tesseract_cmd = path
+                return
+    # Linux typically has tesseract in PATH, but check common locations
+    linux_paths = ["/usr/bin/tesseract", "/usr/local/bin/tesseract"]
+    for path in linux_paths:
+        if os.path.isfile(path):
+            pytesseract.pytesseract.tesseract_cmd = path
+            return
+    # Fallback: assume tesseract is in PATH
+    if shutil.which("tesseract"):
+        pytesseract.pytesseract.tesseract_cmd = "tesseract"
+
+configure_tesseract()
+
+# Map system locale to Tesseract language codes
+def get_tesseract_language() -> str:
+    """Get the appropriate Tesseract language code based on system locale."""
+    locale_to_tesseract = {
+        "en": "eng", "fr": "fra", "de": "deu", "es": "spa", "it": "ita",
+        "pt": "por", "nl": "nld", "ru": "rus", "zh": "chi_sim", "ja": "jpn",
+        "ko": "kor", "ar": "ara", "hi": "hin", "pl": "pol", "tr": "tur",
+    }
+    try:
+        lang_code = (system_language or "en").split("_")[0].lower()
+        return locale_to_tesseract.get(lang_code, "eng")
+    except Exception:
+        return "eng"
+
+TESSERACT_LANG = get_tesseract_language()
+
 MIN_ELEMENT_WIDTH = 20
 MAX_ELEMENT_WIDTH = 300
 MIN_ELEMENT_HEIGHT = 20
@@ -206,7 +283,7 @@ class ScreenAnalyzer:
             denoised = cv2.medianBlur(thresh, 3)
             kernel = np.ones((2, 2), np.uint8)
             dilated = cv2.dilate(denoised, kernel, iterations=1)
-            text = pytesseract.image_to_string(dilated, config=TESSERACT_CONFIG, lang='fra')
+            text = pytesseract.image_to_string(dilated, config=TESSERACT_CONFIG, lang=TESSERACT_LANG)
             return text.strip()
         except Exception as e:
             logging.error(f"Text extraction failed: {e}")
@@ -348,7 +425,47 @@ class ApplicationRegistry:
                     }
                     logging.debug(f"Discovered tool: {tool_name}")
 
-            if not IS_WINDOWS:
+            if IS_MACOS:
+                # Discover macOS applications from /Applications and ~/Applications
+                app_dirs = [
+                    Path("/Applications"),
+                    Path.home() / "Applications",
+                ]
+                for app_dir in app_dirs:
+                    if not app_dir.is_dir():
+                        continue
+                    for app_bundle in app_dir.glob("*.app"):
+                        try:
+                            # Extract app name from bundle name
+                            app_name = app_bundle.stem.lower()
+                            # The executable is typically in Contents/MacOS/
+                            macos_dir = app_bundle / "Contents" / "MacOS"
+                            if macos_dir.is_dir():
+                                # Usually the main executable has the same name as the app
+                                exec_path = macos_dir / app_bundle.stem
+                                if not exec_path.is_file():
+                                    # Try to find any executable in the MacOS folder
+                                    executables = list(macos_dir.iterdir())
+                                    if executables:
+                                        exec_path = executables[0]
+                                    else:
+                                        continue
+
+                                if app_name not in self.registry:
+                                    self.registry[app_name] = {
+                                        "path": str(app_bundle),  # Store the .app bundle path
+                                        "type": "macos_app",
+                                        "source": "Applications",
+                                        "launch_count": 0,
+                                        "success_count": 0,
+                                        "failure_count": 0,
+                                    }
+                                    logging.debug(f"Discovered macOS app: {app_name} -> {app_bundle}")
+                        except Exception as e:
+                            logging.debug(f"Failed to parse {app_bundle}: {e}")
+
+            elif IS_LINUX:
+                # Discover Linux applications from .desktop files
                 desktop_dirs = [
                     Path("/usr/share/applications"),
                     Path.home() / ".local/share/applications",
@@ -396,8 +513,16 @@ class ApplicationRegistry:
             logging.debug(f"Searching for '{search_term}' in the registry.")
             if search_term in self.registry:
                 path = self.registry[search_term]["path"]
-                if path and os.path.isfile(path):
-                    return path
+                app_type = self.registry[search_term].get("type", "")
+
+                # macOS .app bundles are directories, not files
+                if app_type == "macos_app":
+                    if path and os.path.isdir(path):
+                        return path
+                else:
+                    if path and os.path.isfile(path):
+                        return path
+
                 logging.warning(f"Entry found but path is invalid: {path}")
             return None
         except Exception as e:
@@ -593,18 +718,12 @@ class InteractionStrategies:
             try:
                 self._enforce_interaction_delay()
 
-                # Create a detailed prompt with explicit examples
-                prompt = f"""
-                You are an AI assistant specialized in automating user interfaces in Python.
-                The user wants to: "{action_description}".
-                Follow the instructions below:
-                1. Provide functional Python code using 'pywinauto' or 'pyautogui'.
-                2. Validate that your code is self-contained and contains no syntax errors.
-                3. ** Important all necessary imports and references must be included. The script will be executed as is, do not forget anything. **
-                4. Return only the Python code, without any additional text and without markdown like ```python or ```, the code will be executed directly.
+                # Platform-specific prompt and examples
+                current_platform = "Windows" if IS_WINDOWS else ("macOS" if IS_MACOS else "Linux")
 
-                Example to type "hello" in Notepad:
-                
+                if IS_WINDOWS:
+                    automation_lib = "'pywinauto' or 'pyautogui'"
+                    example = """
                 from pywinauto import Application
 
                 # Connect to Notepad
@@ -615,7 +734,45 @@ class InteractionStrategies:
 
                 # Type text into Notepad
                 notepad.type_keys("hello")
-            
+                """
+                else:
+                    automation_lib = "'pyautogui'"
+                    if IS_MACOS:
+                        example = """
+                import pyautogui
+                import time
+
+                # Give focus time to settle
+                time.sleep(0.5)
+
+                # Type text using pyautogui (works cross-platform)
+                pyautogui.typewrite("hello", interval=0.05)
+                """
+                    else:  # Linux
+                        example = """
+                import pyautogui
+                import time
+
+                # Give focus time to settle
+                time.sleep(0.5)
+
+                # Type text using pyautogui (works cross-platform)
+                pyautogui.typewrite("hello", interval=0.05)
+                """
+
+                # Create a detailed prompt with explicit examples
+                prompt = f"""
+                You are an AI assistant specialized in automating user interfaces in Python on {current_platform}.
+                The user wants to: "{action_description}".
+                Follow the instructions below:
+                1. Provide functional Python code using {automation_lib}.
+                2. Validate that your code is self-contained and contains no syntax errors.
+                3. ** Important all necessary imports and references must be included. The script will be executed as is, do not forget anything. **
+                4. Return only the Python code, without any additional text and without markdown like ```python or ```, the code will be executed directly.
+
+                Example:
+                {example}
+
                 Provide only the Python code.
                 """
                 llm = ChatOpenAI(api_key=openai_api_key, model=llm_model)
@@ -631,8 +788,10 @@ class InteractionStrategies:
                     logging.error(f"Syntax error in generated code: {e}")
                     continue  # Retry on syntax error
 
-                # Execute the generated code
-                exec_locals = {"window": window, "pyautogui": pyautogui, "pywinauto": pywinauto}
+                # Execute the generated code with platform-appropriate locals
+                exec_locals = {"window": window, "pyautogui": pyautogui}
+                if IS_WINDOWS:
+                    exec_locals["pywinauto"] = pywinauto
                 try:
                     exec(response, {}, exec_locals)
                 except Exception as e:
@@ -710,10 +869,26 @@ class TaskExecutor:
         """Validate the open application action."""
         try:
             application_name = step.get("application")
-            for proc in pywinauto.findwindows.find_elements():
-                if application_name.lower() in proc.name.lower():
-                    logging.info(f"Validation: '{application_name}' is open")
-                    return True
+
+            if IS_WINDOWS:
+                # Use pywinauto on Windows
+                for proc in pywinauto.findwindows.find_elements():
+                    if application_name.lower() in proc.name.lower():
+                        logging.info(f"Validation: '{application_name}' is open")
+                        return True
+            else:
+                # Use psutil for cross-platform process checking
+                for proc in psutil.process_iter(['name', 'cmdline']):
+                    try:
+                        proc_name = proc.info.get('name', '').lower()
+                        cmdline = proc.info.get('cmdline', []) or []
+                        cmdline_str = ' '.join(cmdline).lower()
+
+                        if application_name.lower() in proc_name or application_name.lower() in cmdline_str:
+                            logging.info(f"Validation: '{application_name}' is open")
+                            return True
+                    except (psutil.NoSuchProcess, psutil.AccessDenied):
+                        continue
             return False
         except Exception as e:
             logging.error(f"Failed to validate open action: {e}")
@@ -793,15 +968,35 @@ class TaskExecutor:
         application_name = step.get("application")
         executable_path = self.app_registry.find_executable(application_name)
 
-        if not executable_path or not os.path.isfile(executable_path):
+        # Validate path - on macOS, .app bundles are directories
+        path_valid = executable_path and (os.path.isfile(executable_path) or os.path.isdir(executable_path))
+        if not path_valid:
             self.app_registry.update_tool_stats(application_name, success=False)
             return f"Executable not found: {application_name}"
 
         try:
-            process = await asyncio.to_thread(
-                Application(backend="uia").start,
-                executable_path
-            )
+            if IS_WINDOWS:
+                # Use pywinauto on Windows
+                process = await asyncio.to_thread(
+                    Application(backend="uia").start,
+                    executable_path
+                )
+            elif IS_MACOS:
+                # Use 'open' command on macOS
+                await asyncio.to_thread(
+                    subprocess.Popen,
+                    ["open", "-a", executable_path],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL
+                )
+            else:
+                # Use subprocess on Linux
+                await asyncio.to_thread(
+                    subprocess.Popen,
+                    [executable_path],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL
+                )
 
             for _ in range(10):
                 try:
@@ -861,10 +1056,13 @@ class TaskInterpreter:
             tool_names = [tool["name"] for tool in self.app_registry.list_tools()]
             available_apps = ", ".join(tool_names)
 
+            # Determine current platform for context
+            current_platform = "Windows" if IS_WINDOWS else ("macOS" if IS_MACOS else "Linux")
+
             prompt_template = PromptTemplate(
-                input_variables=["user_request", "available_apps"],
+                input_variables=["user_request", "available_apps", "platform"],
                 template="""
-                You are an AI assistant tasked with executing user requests in a Windows environment.
+                You are an AI assistant tasked with executing user requests in a {platform} environment.
                 The available applications are:
                 {available_apps}
 
@@ -881,6 +1079,11 @@ class TaskInterpreter:
                         {{"action": "capture_screen"}}
                     ]
                 }}
+
+                Important: Use appropriate application names for {platform}:
+                - Windows: notepad.exe, calc.exe, etc.
+                - macOS: TextEdit, Calculator, etc.
+                - Linux: gedit, gnome-calculator, etc.
                 """
             )
 
@@ -889,7 +1092,8 @@ class TaskInterpreter:
 
             response = await chain.ainvoke({
                 "user_request": user_request,
-                "available_apps": available_apps
+                "available_apps": available_apps,
+                "platform": current_platform
             })
 
             json_pattern = r"{.*}"
@@ -1013,26 +1217,37 @@ async def main():
                     speak_message(f"Available applications: {', '.join(tool_names)}")
                     continue
                 elif "sample" in user_request:
-                    # Example task plan (replace with your actual plan)
+                    # Example task plan - platform-adaptive
                     speak_message("Executing the sample plan.")
+
+                    # Choose appropriate text editor for the platform
+                    if IS_WINDOWS:
+                        app_name = "notepad"
+                        process_name = "notepad.exe"
+                    elif IS_MACOS:
+                        app_name = "textedit"
+                        process_name = "TextEdit"
+                    else:  # Linux
+                        app_name = "gedit"
+                        process_name = "gedit"
+
                     example_task: TaskPlan = {
-                    "steps": [
-                        
-                        {
-                        "action": "open",
-                        "application": "notepad"
-                        },
-                        {
-                        "action": "interact",
-                        "details": {
-                            "process_name": "notepad.exe",
-                            "action_description": "Create a new file and type 'Hello, World!'"
-                        }
-                        }
-                    ]
+                        "steps": [
+                            {
+                                "action": "open",
+                                "application": app_name
+                            },
+                            {
+                                "action": "interact",
+                                "details": {
+                                    "process_name": process_name,
+                                    "action_description": "Create a new file and type 'Hello, World!'"
+                                }
+                            }
+                        ]
                     }
 
-                    task_executor.execute_task(example_task)
+                    await task_executor.execute_task(example_task)
                     speak_message("Task executed successfully.")
                 if user_request:
                     speak_message("Analyzing your request...")
