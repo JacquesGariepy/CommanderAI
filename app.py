@@ -51,11 +51,12 @@ import pyttsx3
 from dotenv import load_dotenv
 load_dotenv()
 
-# Configure logging
+# Configure logging - use platform-appropriate log path
+LOG_FILE = str(get_app_data_dir() / "automation.log")
 logging.basicConfig(
     level=logging.DEBUG,
     format="%(asctime)s - %(levelname)s - %(message)s - [%(pathname)s:%(lineno)d]",
-    filename="automation.log",
+    filename=LOG_FILE,
     filemode="a",
 )
 
@@ -531,25 +532,103 @@ def get_ai_cli_tools() -> AICLITools:
     return ai_cli_tools
 
 
-# Initialize text-to-speech engine
-engine = pyttsx3.init()
-engine.setProperty("rate", 150)  # Set speech rate
+# Initialize text-to-speech engine with platform-specific handling
+def init_tts_engine():
+    """Initialize text-to-speech engine with platform-specific configuration."""
+    try:
+        if IS_WINDOWS:
+            # Windows uses SAPI5
+            engine = pyttsx3.init('sapi5')
+        elif IS_MACOS:
+            # macOS uses NSSpeechSynthesizer
+            engine = pyttsx3.init('nsss')
+        else:
+            # Linux uses espeak
+            engine = pyttsx3.init('espeak')
+
+        engine.setProperty("rate", 150)
+
+        # Set a voice appropriate for the system language
+        voices = engine.getProperty('voices')
+        if voices:
+            # Try to find a voice matching system language
+            lang_prefix = (system_language or "en").split("_")[0].lower()
+            for voice in voices:
+                if lang_prefix in voice.id.lower() or lang_prefix in str(voice.languages).lower():
+                    engine.setProperty('voice', voice.id)
+                    break
+
+        logging.info(f"TTS engine initialized for {platform.system()}")
+        return engine
+    except Exception as e:
+        logging.warning(f"Failed to initialize TTS engine: {e}")
+        return None
+
+
+# Global TTS engine (may be None if initialization fails)
+tts_engine = init_tts_engine()
+
 
 def speak_message(message: str):
     """Speak a message using text-to-speech."""
     logging.debug(f"speak_message: {message}")
-    engine.say(message)
-    engine.runAndWait()
+    if tts_engine:
+        try:
+            tts_engine.say(message)
+            tts_engine.runAndWait()
+        except Exception as e:
+            logging.error(f"TTS error: {e}")
+            print(f"[TTS unavailable] {message}")
+    else:
+        # Fallback: just print the message
+        print(f"[TTS unavailable] {message}")
+
+def check_microphone_available() -> bool:
+    """Check if a microphone is available on the system."""
+    try:
+        # Check if PyAudio can find any input devices
+        mics = sr.Microphone.list_microphone_names()
+        return len(mics) > 0
+    except (OSError, AttributeError, Exception) as e:
+        logging.debug(f"Microphone check failed: {e}")
+        return False
+
+
+def get_speech_recognition_language() -> str:
+    """Get the appropriate language code for speech recognition based on system locale."""
+    # Map common locale prefixes to Google Speech API language codes
+    locale_to_speech = {
+        "en": "en-US", "fr": "fr-FR", "de": "de-DE", "es": "es-ES", "it": "it-IT",
+        "pt": "pt-BR", "nl": "nl-NL", "ru": "ru-RU", "zh": "zh-CN", "ja": "ja-JP",
+        "ko": "ko-KR", "ar": "ar-SA", "hi": "hi-IN", "pl": "pl-PL", "tr": "tr-TR",
+    }
+    try:
+        lang_code = (system_language or "en").split("_")[0].lower()
+        return locale_to_speech.get(lang_code, "en-US")
+    except Exception:
+        return "en-US"
+
+
+SPEECH_LANGUAGE = get_speech_recognition_language()
+
 
 def recognize_speech() -> str:
     """Recognize voice command and convert to text."""
+    # First check if microphone is available
+    if not check_microphone_available():
+        logging.warning("No microphone available - voice input disabled")
+        speak_message("No microphone available. Please use text input.")
+        return ""
+
     recognizer = sr.Recognizer()
     try:
         with sr.Microphone() as source:
+            # Adjust for ambient noise on first use
+            recognizer.adjust_for_ambient_noise(source, duration=0.5)
             speak_message("I'm listening...")
             try:
                 audio = recognizer.listen(source, timeout=5)
-                command = recognizer.recognize_google(audio, language="en-US")
+                command = recognizer.recognize_google(audio, language=SPEECH_LANGUAGE)
                 logging.info(f"Recognized command: {command}")
                 return command.lower()
             except sr.UnknownValueError:
@@ -558,17 +637,18 @@ def recognize_speech() -> str:
             except sr.WaitTimeoutError:
                 speak_message("Command timeout.")
                 return ""
+            except sr.RequestError as e:
+                logging.error(f"Speech API request error: {e}")
+                speak_message("Speech recognition service unavailable.")
+                return ""
             except Exception as e:
                 logging.error(f"Voice recognition error: {e}")
                 speak_message("Error during voice recognition.")
                 return ""
-    except sr.RequestError as e:
-        logging.error(f"Request error for voice recognition service: {e}")
-        speak_message("Request error for voice recognition service.")
-        return ""
-    except sr.MicrophoneUnavailableError:
-        logging.error("No default input device available.")
-        speak_message("No default input device available.")
+    except OSError as e:
+        # Common on systems without audio (Docker, CI, servers)
+        logging.error(f"Audio system error: {e}")
+        speak_message("Audio system not available.")
         return ""
     except Exception as e:
         logging.error(f"Unexpected error during voice recognition: {e}")
@@ -997,13 +1077,35 @@ class WindowLocator:
                 logging.warning(f"No visible window found for PID {pid}")
                 return None
             else:
-                for window in gw.getAllWindows():
+                # On Linux, pygetwindow supports .pid
+                # On macOS, .pid is NOT supported - use title matching instead
+                if IS_LINUX:
+                    for window in gw.getAllWindows():
+                        try:
+                            if hasattr(window, '_hWnd') or hasattr(window, 'pid'):
+                                if window.pid == pid:
+                                    logging.info(f"Window found for PID {pid}")
+                                    return window
+                        except (AttributeError, Exception):
+                            continue
+                elif IS_MACOS:
+                    # macOS: pygetwindow doesn't support PID lookup
+                    # Return the first visible window as fallback
+                    # Better approach: use process name matching
                     try:
-                        if window.pid == pid:
-                            logging.info(f"Window found for PID {pid}")
-                            return window
-                    except Exception:
-                        continue
+                        proc = psutil.Process(pid)
+                        proc_name = proc.name().lower()
+                        for window in gw.getAllWindows():
+                            try:
+                                # Match by window title containing process name
+                                if proc_name in window.title.lower():
+                                    logging.info(f"Window found for PID {pid} by title match")
+                                    return window
+                            except Exception:
+                                continue
+                    except (psutil.NoSuchProcess, Exception) as e:
+                        logging.debug(f"Could not find process {pid}: {e}")
+
                 logging.warning(f"No window found for PID {pid}")
                 return None
         except Exception as e:
